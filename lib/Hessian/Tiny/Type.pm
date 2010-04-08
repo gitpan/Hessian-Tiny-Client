@@ -67,11 +67,11 @@ sub _l2n { return $Config{'byteorder'} =~ /^1234/ ? scalar reverse $_[0] : $_[0]
 
 sub _make_reader {
   my $fh = shift;
-  binmode $fh, ':raw';
+  binmode $fh, ':bytes';
   seek $fh,0,0;
   return sub {
     my($len,$utf8_flag) = @_;
-    binmode $fh, $utf8_flag ? ':utf8' : ':raw';
+    binmode $fh, $utf8_flag ? ':utf8' : ':bytes';
     return seek $fh, $len, 1 if $len < 0; #rewind on negative len
 
     my $buf = '';
@@ -84,7 +84,7 @@ sub _make_writer {
   my $fh = shift;
   return sub {
     my($buf,$utf8_flag) = @_;
-    binmode $fh, $utf8_flag ? ':utf8' : ':raw';
+    binmode $fh, $utf8_flag ? ':utf8' : ':bytes';
     print $fh $buf;
   }
 }

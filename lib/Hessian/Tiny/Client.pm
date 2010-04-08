@@ -3,7 +3,7 @@ package Hessian::Tiny::Client;
 use warnings;
 use strict;
 
-require 5.6.0;
+require 5.006;
 
 use URI ();
 use IO::File ();
@@ -25,7 +25,7 @@ Version 0.09
 
 =cut
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 our $ErrStr;
 
 
@@ -157,33 +157,36 @@ sub call {
     $header->authorization;
     $header->authorization_basic($self->{auth}->[0],$self->{auth}->[1]);
   }
-  my $http_request = HTTP::Request->new(POST => $self->{url}, $header);
   my $buf = '';
-  binmode $call_fh,':raw';
-  $http_request->add_content($buf) while( 0 < read($call_fh,$buf,255));
-  $call_fh->close;
+  binmode $call_fh,':bytes';
+  my $http_request = HTTP::Request->new(POST => $self->{url}, $header,sub{
+    read $call_fh,$buf,255; $buf
+  });
 
 # send http request
   my $reply_fh = File::Temp::tempfile();
   return 2, $self->_elog("call, open temp reply file failed $!") unless defined $reply_fh;
-  binmode $reply_fh,':raw';
+  binmode $reply_fh,':bytes';
   my $http_response = $ua->request($http_request, sub{
     my($chunk,$res,$lwp) = @_; print $reply_fh $chunk;
   });
+  $call_fh->close;
 
-  if($http_response->is_success){
-    my($st,$re) = _read_reply( Hessian::Tiny::Type::_make_reader($reply_fh),
-                               $self->{hessian_flag});
-    $self->_elog("Fault: $re->{code}; $re->{message}") if $st && 'Hessian::Type::Fault' eq ref $re;
-    $self->_elog($re) if $st == 2;
-    return $st,$re;
-  } # if http successful
+  unless($http_response->is_success){ # http level failure
+    $reply_fh->close;
+    return 2, $self->_elog('Hessian http response unsuccessful: ',
+      $http_response->status_line, $http_response->error_as_HTML)
+    ;
+  }
 
-  $reply_fh->close;
-# http level failure
-  return 2, $self->_elog('Hessian http response unsuccessful: ',
-    $http_response->status_line, $http_response->error_as_HTML);
-
+  my($st,$re);
+  eval{
+    ($st,$re) = _read_reply( Hessian::Tiny::Type::_make_reader($reply_fh),$self->{hessian_flag});
+    1;
+  } or return 2, $self->_elog("Hessian parse reply: $@");
+  $self->_elog("Fault: $re->{code}; $re->{message}") if $st && 'Hessian::Type::Fault' eq ref $re;
+  $self->_elog($re) if $st == 2;
+  return $st,$re;
 }
 
 sub _elog { my $self=shift;$ErrStr=join'',@_;print STDERR @_,"\n" if $self->{debug}; join '',@_ }
