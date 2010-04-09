@@ -21,11 +21,11 @@ Hessian::Tiny::Client - Hessian RPC Client implementation in pure Perl
 
 =head1 VERSION
 
-Version 0.09
+Version 0.11
 
 =cut
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 our $ErrStr;
 
 
@@ -64,11 +64,30 @@ This module allows you to write Hessian clients in Perl. This module supports He
         hessian_flag => 1, # if you need strong typing in return value
     );
 
-'url' need to be a valid url, otherwise the constructor will return undef.
-'version', hessian version either 1 or 2.
-'debug', you probably don't need to set this flag.
-'auth', if server requires this authentication.
-'hessian_flag', default off, that means return value are automatically converted into native perl data; if set to true, you will get Hessian::Type::* object as return.
+=over
+
+=item 'url'
+
+hessian server url, need to be a valid url, otherwise the constructor will return undef.
+
+=item 'version'
+
+hessian protocol version, 1 or 2.
+
+=item 'debug'
+
+for debugging, you probably don't need to set this flag.
+
+=item 'auth'
+
+if http server requires authentication. (passed on to LWP request)
+
+=item 'hessian_flag'
+
+default off, that means return value are automatically converted into native perl data;
+if set to true, you will get Hessian::Type::* object as return.
+
+=back
 
 =cut
 
@@ -118,11 +137,15 @@ sub new {
         print "error: $res";
     }
 
-return value, $stat: 0 for success, 1 for Fault, 2 for communication errors;
-$res will hold error (Hessian::Fault or string) in case of unsuccessful call;
-$res will hold return value in case of successful call; normally Hessian types
-are converted to perl data directly, if you want strong typing in return value,
-you can set (hessian_flag => 1) in the constructor call new().
+=over
+
+=item return values:
+
+B<$stat>: 0 for success, 1 for Hessian level Fault, 2 for other errors such as http communication error or parsing anomaly;
+
+B<$res>: will hold the hessian call result if call was successful, or will hold error (Hessian::Fault or string) in case of unsuccessful call;
+
+normally Hessian types are converted to perl data directly, if you want strong typing in return value, you can set (hessian_flag => 1) in the constructor call new().
 
 =cut
 
@@ -146,6 +169,7 @@ sub call {
   }or return 2, $self->_elog("write_call: $@");
 
 # write call successful, rewind & read
+  $call_fh->flush();
   seek $call_fh,0,0;
 
 # make LWP client
@@ -153,7 +177,10 @@ sub call {
   $ua->agent("Perl Hessian::Tiny::Client $$self{version}");
   my $header = HTTP::Headers->new();
 
-  if('ARRAY' eq ref $self->{auth}){
+  if('ARRAY' eq ref $self->{auth} and
+    length $self->{auth}->[0] > 0 and
+    length $self->{auth}->[1] > 0 
+  ){
     $header->authorization;
     $header->authorization_basic($self->{auth}->[0],$self->{auth}->[1]);
   }
@@ -180,6 +207,8 @@ sub call {
   }
 
   my($st,$re);
+  $reply_fh->flush();
+  seek $reply_fh,0,0;
   eval{
     ($st,$re) = _read_reply( Hessian::Tiny::Type::_make_reader($reply_fh),$self->{hessian_flag});
     1;
@@ -228,6 +257,8 @@ sub _read_reply {
   }
 }
 
+=back
+
 =head1 HESSIAN DATA TYPES
 
 =head2 Null
@@ -269,7 +300,7 @@ when 'hessian_flag' is set to true, you will get Math::BigInt.
 
 As return value, by default, you will get the number directly;
 when 'hessian_flag' is set to true, you will get Hessian::Type::Double.
-Note, floating point numbers may appear slightly inaccurate, due to the binary nature of machines (not the protocol itself).
+Note, floating point numbers may appear slightly inaccurate, due to the binary nature of machines (not the fault of protocol itself, or Perl even).
 
 =head2 Date
 
@@ -287,7 +318,7 @@ when 'hessian_flag' is set to true, you will get Hessian::Type::Date (milli sec 
 
 As return value, by default, you will get the perl string;
 when 'hessian_flag' is set to true, you will get Hessian::Type::Binary or
-Hessian::Type::String object.
+Hessian::Type::String object. (Binary means byte stream, while String is UTF-8)
 
 =head2 XML
 
@@ -353,7 +384,7 @@ You can find documentation for this module with the perldoc command.
     perldoc Hessian::Tiny::Client
 
 
-For information on the protocol itself, take a look at:
+For information on the wonderful protocol itself, take a look at:
 	http://hessian.caucho.com/
 
 =over 4

@@ -23,5 +23,9 @@ Revision history for Hessian-Tiny
 
 0.09    Fri Apr  2 16:45:03 EDT 2010
         make it run on win32 platform also
+
 0.10    Thu Apr  8 11:15:21 EDT 2010
         fix utf8 problem, less memory usage
+
+0.11    Fri Apr  9 08:30:51 EDT 2010
+        update POD
